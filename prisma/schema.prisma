@@ -1,0 +1,191 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  TECHNIEK
+  ZAALWACHT
+  PROGRAMMA
+  ADMIN
+}
+
+enum AvailabilityStatus {
+  available
+  unavailable
+}
+
+enum AssignmentSource {
+  auto
+  manual
+}
+
+enum SwapStatus {
+  open
+  accepted
+  rejected
+  cancelled
+}
+
+model User {
+  id         String   @id @default(uuid())
+  name       String
+  email      String   @unique
+  password   String?  // Hashed password
+  passwordResetToken String? // Token for password reset
+  passwordResetExpires DateTime? // Expiration time for reset token
+  roles      String[] // store as text[]; interpret as Role[]
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  availabilities Availability[]
+  assignments    Assignment[]
+  skillTags      SkillTag[]
+  auditLogs      AuditLog[] @relation("AuditActor")
+  swapRequests   SwapRequest[]
+  availabilityRequests AvailabilityRequest[]
+
+  @@map("users")
+}
+
+model Film {
+  id        String    @id @default(uuid())
+  title     String    @unique
+  notes     String?
+  runtime   Int?      // Runtime in minutes
+  archived  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  screenings Screening[]
+
+  @@map("films")
+}
+
+model Screening {
+  id        String    @id @default(uuid())
+  film      Film      @relation(fields: [filmId], references: [id])
+  filmId    String
+  startsAt  DateTime
+  endsAt    DateTime
+  location  String?
+  notes     String?
+
+  availabilities Availability[]
+  assignments    Assignment[]
+
+  @@index([startsAt])
+  @@map("screenings")
+}
+
+model Availability {
+  id          String             @id @default(uuid())
+  screening   Screening          @relation(fields: [screeningId], references: [id])
+  screeningId String
+  user        User               @relation(fields: [userId], references: [id])
+  userId      String
+  role        Role
+  status      AvailabilityStatus
+  createdAt   DateTime           @default(now())
+
+  @@unique([screeningId, userId, role])
+  @@index([screeningId, role])
+  @@map("availabilities")
+}
+
+model Assignment {
+  id          String     @id @default(uuid())
+  screening   Screening   @relation(fields: [screeningId], references: [id])
+  screeningId String
+  user        User        @relation(fields: [userId], references: [id])
+  userId      String
+  role        Role
+  source      AssignmentSource @default(auto)
+  createdBy   String?
+  createdAt   DateTime    @default(now())
+
+  swapRequests SwapRequest[]
+
+  @@index([screeningId, role])
+  @@unique([screeningId, role, userId])
+  @@map("assignments")
+}
+
+model SwapRequest {
+  id          String    @id @default(uuid())
+  assignment  Assignment @relation(fields: [assignmentId], references: [id])
+  assignmentId String
+  requester   User      @relation(fields: [requesterId], references: [id])
+  requesterId String
+  status      SwapStatus @default(open)
+  createdAt   DateTime  @default(now())
+  decidedAt   DateTime?
+  decidedBy   String?
+
+  @@map("swap_requests")
+}
+
+model Constraint {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+
+  @@map("constraints")
+}
+
+model SkillTag {
+  id     String @id @default(uuid())
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+  tag    String
+
+  @@index([tag])
+  @@map("skill_tags")
+}
+
+model AvailabilityRequest {
+  id           String   @id @default(uuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String
+  requestedBy  String
+  screeningIds String[]
+  template     String
+  status       String   @default("SENT") // SENT, RESPONDED, EXPIRED
+  sentAt       DateTime @default(now())
+  respondedAt  DateTime?
+  
+  @@map("availability_requests")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id])
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String
+  data      Json?
+  createdAt DateTime  @default(now())
+
+  @@map("audit_logs")
+}
+
+model EmailTemplate {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g., "availability_request", "assignment_notification", "swap_request"
+  name        String   // Human-readable name
+  subject     String
+  bodyHtml    String   @db.Text
+  bodyText    String?  @db.Text
+  variables   String[] // List of available variables like {userName}, {filmTitle}, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("email_templates")
+}
+
