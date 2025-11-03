@@ -210,5 +210,5 @@ Ensure all environment variables are set in your production environment, includi
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the GPL-3.0 license.
 
